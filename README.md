@@ -1,0 +1,2 @@
+# Transfer_mundane_stuff_from_creative_human_to_machine
+Augment Human decision making with machine learning
