@@ -1,0 +1,39 @@
+{
+  "label": "mldataproccluster",
+  "description": "mldataproccluster",
+  "provisioner": {
+    "name": "gcp-existing-dataproc",
+    "properties": [
+      {
+        "name": "projectId",
+        "value": "gcpproject1",
+        "isEditable": true
+      },
+      {
+        "name": "clusterName",
+        "value": "mldataproccluster",
+        "isEditable": true
+      },
+      {
+        "name": "region",
+        "value": "us-east1",
+        "isEditable": true
+      },
+      {
+        "name": "accountKey",
+        "value": "",
+        "isEditable": true
+      },
+      {
+        "name": "sshUser",
+        "value": "",
+        "isEditable": true
+      },
+      {
+        "name": "sshKey",
+        "value": "",
+        "isEditable": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Machine Learning Automation</title>
+</head>
+<body>
+<h1>Summary of Service</h1>
+<p>
+ This serves as a framework to automate ETL/ELT processes along with training/re-training a machine learning model, evaluating 
+    and deploying it to Kubernetes cluster. <br><br>
+    Steps involved in this include: <br><br>
+    1. Ensuring this process runs at required frequency by validating data file count within Cloud Storage against limit set. <br>
+    2. Creating a dataproc cluster with required configuration maintained through reusable parameters <br>
+    3. Creating a Data Fusion instance if not already existing and setting the profile to use the dataproc cluster created above <br>
+    4. Also setting system preferences such that when a fusion pipeline runs, it uses the profile defined above <br>
+    5. Deploying an existing Data Fusion pipeline to the Data Fusion Instance <br>
+    6. Starting the Data Fusion pipeline which internally deals with ETL/ELT, model evaluation, training/re-training auto-ml model using big query, building container
+    and deploying to kubernetes cluster <br>
+    7. Dataproc cluster created in step 2 will be deleted if idle for 30 min and includes shutdown script to delete the fusion instance as well as part of cleanup <br><br>
+
+    Sample "POST" Request body:
+    {"parameterFilePath" : "gs://path/of/parameterfile", 
+    "parameterFileName" : "PipelineInitiationParameters.json", 
+    "dataFile" : "gs://path/of/datafile/includingfilename",
+    "dataFileCountLimit" : "0"}
+
+</p>
+
+</body>
+</html>

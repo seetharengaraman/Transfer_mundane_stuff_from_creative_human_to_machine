@@ -1,0 +1,478 @@
+{
+    "artifact": {
+        "name": "cdap-data-pipeline",
+        "version": "6.4.1",
+        "scope": "SYSTEM"
+    },
+    "description": "Data Pipeline Application",
+    "name": "FulfilmentDateEstimation",
+    "config": {
+        "resources": {
+            "memoryMB": 2048,
+            "virtualCores": 1
+        },
+        "driverResources": {
+            "memoryMB": 2048,
+            "virtualCores": 1
+        },
+        "connections": [
+            {
+                "from": "SourceDataFromGCS",
+                "to": "TransformData"
+            },
+            {
+                "from": "TransformData",
+                "to": "OrderInsertToBigQuery"
+            },
+            {
+                "from": "TransformData",
+                "to": "ErrorCollector"
+            },
+            {
+                "from": "OrderInsertToBigQuery",
+                "to": "BigQueryValidateTimeZone"
+            },
+            {
+                "from": "BigQueryValidateTimeZone",
+                "to": "ObtainTimeZoneFromLatLong"
+            },
+            {
+                "from": "ObtainTimeZoneFromLatLong",
+                "to": "BigQueryTransformations"
+            },
+            {
+                "from": "BigQueryTransformations",
+                "to": "ModelEvaluate"
+            },
+            {
+                "from": "ModelEvaluate",
+                "to": "Conditional"
+            },
+            {
+                "from": "Conditional",
+                "to": "PostiveResultCleanup",
+                "condition": "true"
+            },
+            {
+                "from": "Conditional",
+                "to": "ReTrainModelandExport",
+                "condition": "false"
+            },
+            {
+                "from": "ErrorCollector",
+                "to": "errorstore"
+            },
+            {
+                "from": "GCS Argument Setter",
+                "to": "SourceDataFromGCS"
+            }
+        ],
+        "postActions": [],
+        "properties": {},
+        "processTimingEnabled": true,
+        "stageLoggingEnabled": true,
+        "stages": [
+            {
+                "name": "SourceDataFromGCS",
+                "plugin": {
+                    "name": "GCSFile",
+                    "type": "batchsource",
+                    "label": "SourceDataFromGCS",
+                    "artifact": {
+                        "name": "google-cloud",
+                        "version": "0.17.3",
+                        "scope": "SYSTEM"
+                    },
+                    "properties": {
+                        "filenameOnly": "false",
+                        "copyHeader": "true",
+                        "schema": "{\"type\":\"record\",\"name\":\"text\",\"fields\":[{\"name\":\"body\",\"type\":\"string\"}]}",
+                        "path": "${inputPath}",
+                        "format": "text",
+                        "project": "${currentProject}",
+                        "recursive": "false",
+                        "referenceName": "inbounddata.SHIP_DATE_ESTIMATION_data.csv",
+                        "sampleSize": "1000",
+                        "skipHeader": "false",
+                        "serviceAccountType": "filePath",
+                        "serviceFilePath": "auto-detect",
+                        "encrypted": "false",
+                        "fileEncoding": "UTF-8"
+                    }
+                },
+                "outputSchema": "{\"type\":\"record\",\"name\":\"text\",\"fields\":[{\"name\":\"body\",\"type\":\"string\"}]}",
+                "id": "SourceDataFromGCS"
+            },
+            {
+                "name": "TransformData",
+                "plugin": {
+                    "name": "Wrangler",
+                    "type": "transform",
+                    "label": "TransformData",
+                    "artifact": {
+                        "name": "wrangler-transform",
+                        "version": "4.4.1",
+                        "scope": "SYSTEM"
+                    },
+                    "properties": {
+                        "workspaceId": "79fb56c5-c16f-43e6-8ace-7633f6af58d5",
+                        "directives": "parse-as-csv :body ',' true\ndrop :body\nparse-as-date ORDER_LINE_CREATED_TIMESTAMP\nparse-as-date ALLOCATION_TIMESTAMP\nparse-as-date EARLIEST_DELIVERY_DATE\nparse-as-date EARLIEST_SHIP_DATE\nparse-as-date RELEASE_TIMESTAMP\nparse-as-date FULFILLMENT_EVENT_TIMESTAMP\nparse-as-date FULFILLMENT_DATE\ndrop :ORDER_LINE_CREATED_TIMESTAMP ,ALLOCATION_TIMESTAMP ,EARLIEST_DELIVERY_DATE ,EARLIEST_SHIP_DATE ,RELEASE_TIMESTAMP ,FULFILLMENT_EVENT_TIMESTAMP ,FULFILLMENT_DATE\ncolumns-replace s/_1//g\nset-type :ORDER_LINE_ID integer\nset-type :ORDER_LINE_QUANTITY float\nset-type :IS_GIFT integer\nuppercase DESTINATION_CITY\nuppercase DESTINATION_STATE\nuppercase DESTINATION_POSTALCODE\nuppercase DESTINATION_COUNTRY\nuppercase LOCATION_TYPE_ID\nuppercase SOURCE_CITY\nuppercase SOURCE_STATE\nuppercase SOURCE_POSTALCODE\nuppercase SOURCE_COUNTRY\nset-type :FULFILLED_QUANTITY float",
+                        "schema": "{\"type\":\"record\",\"name\":\"etlSchemaBody\",\"fields\":[{\"name\":\"ORG_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_TYPE_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_LINE_ID\",\"type\":[\"int\",\"null\"]},{\"name\":\"ITEM_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_LINE_QUANTITY\",\"type\":[\"float\",\"null\"]},{\"name\":\"IS_GIFT\",\"type\":[\"int\",\"null\"]},{\"name\":\"REQUESTED_DELIVERY_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"PROMISED_DELIVERY_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"DELIVERY_METHOD_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_CITY\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_STATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_POSTALCODE\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_COUNTRY\",\"type\":[\"string\",\"null\"]},{\"name\":\"ALLOCATION_TIMESTAMP\",\"type\":[\"string\",\"null\"]},{\"name\":\"REQUESTED_SERVICE_LEVEL\",\"type\":[\"string\",\"null\"]},{\"name\":\"REQUESTED_CARRIER\",\"type\":[\"string\",\"null\"]},{\"name\":\"REQUESTED_SHIP_VIA\",\"type\":[\"string\",\"null\"]},{\"name\":\"LOCATION\",\"type\":[\"string\",\"null\"]},{\"name\":\"LOCATION_TYPE_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_CITY\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_STATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_POSTALCODE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_COUNTRY\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_LATITUDE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_LONGITUDE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_PREFERRED_CARRIER\",\"type\":[\"string\",\"null\"]},{\"name\":\"EARLIEST_DELIVERY_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"EARLIEST_SHIP_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"LATEST_SHIP_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"LATEST_RELEASE_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"RELEASE_TIMESTAMP\",\"type\":[\"string\",\"null\"]},{\"name\":\"FULFILLMENT_EVENT_TIMESTAMP\",\"type\":[\"string\",\"null\"]},{\"name\":\"SHIPPED_SERVICE_LEVEL\",\"type\":[\"string\",\"null\"]},{\"name\":\"SHIPPED_CARRIER\",\"type\":[\"string\",\"null\"]},{\"name\":\"SHIPPED_SHIP_VIA\",\"type\":[\"string\",\"null\"]},{\"name\":\"FULFILLED_QUANTITY\",\"type\":[\"float\",\"null\"]},{\"name\":\"FULFILLMENT_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_LINE_CREATED_TIMESTAMP\",\"type\":[{\"type\":\"long\",\"logicalType\":\"timestamp-micros\"},\"null\"]},{\"name\":\"TIMEZONE\",\"type\":[\"string\",\"null\"]}]}",
+                        "field": "*",
+                        "precondition": "false",
+                        "on-error": "send-to-error-port"
+                    }
+                },
+                "outputSchema": "{\"type\":\"record\",\"name\":\"etlSchemaBody\",\"fields\":[{\"name\":\"ORG_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_TYPE_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_LINE_ID\",\"type\":[\"int\",\"null\"]},{\"name\":\"ITEM_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_LINE_QUANTITY\",\"type\":[\"float\",\"null\"]},{\"name\":\"IS_GIFT\",\"type\":[\"int\",\"null\"]},{\"name\":\"REQUESTED_DELIVERY_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"PROMISED_DELIVERY_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"DELIVERY_METHOD_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_CITY\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_STATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_POSTALCODE\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_COUNTRY\",\"type\":[\"string\",\"null\"]},{\"name\":\"ALLOCATION_TIMESTAMP\",\"type\":[\"string\",\"null\"]},{\"name\":\"REQUESTED_SERVICE_LEVEL\",\"type\":[\"string\",\"null\"]},{\"name\":\"REQUESTED_CARRIER\",\"type\":[\"string\",\"null\"]},{\"name\":\"REQUESTED_SHIP_VIA\",\"type\":[\"string\",\"null\"]},{\"name\":\"LOCATION\",\"type\":[\"string\",\"null\"]},{\"name\":\"LOCATION_TYPE_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_CITY\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_STATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_POSTALCODE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_COUNTRY\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_LATITUDE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_LONGITUDE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_PREFERRED_CARRIER\",\"type\":[\"string\",\"null\"]},{\"name\":\"EARLIEST_DELIVERY_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"EARLIEST_SHIP_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"LATEST_SHIP_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"LATEST_RELEASE_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"RELEASE_TIMESTAMP\",\"type\":[\"string\",\"null\"]},{\"name\":\"FULFILLMENT_EVENT_TIMESTAMP\",\"type\":[\"string\",\"null\"]},{\"name\":\"SHIPPED_SERVICE_LEVEL\",\"type\":[\"string\",\"null\"]},{\"name\":\"SHIPPED_CARRIER\",\"type\":[\"string\",\"null\"]},{\"name\":\"SHIPPED_SHIP_VIA\",\"type\":[\"string\",\"null\"]},{\"name\":\"FULFILLED_QUANTITY\",\"type\":[\"float\",\"null\"]},{\"name\":\"FULFILLMENT_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_LINE_CREATED_TIMESTAMP\",\"type\":[{\"type\":\"long\",\"logicalType\":\"timestamp-micros\"},\"null\"]},{\"name\":\"TIMEZONE\",\"type\":[\"string\",\"null\"]}]}",
+                "inputSchema": [
+                    {
+                        "name": "SourceDataFromGCS",
+                        "schema": "{\"type\":\"record\",\"name\":\"text\",\"fields\":[{\"name\":\"body\",\"type\":\"string\"}]}"
+                    }
+                ],
+                "id": "TransformData"
+            },
+            {
+                "name": "OrderInsertToBigQuery",
+                "plugin": {
+                    "name": "BigQueryTable",
+                    "type": "batchsink",
+                    "label": "OrderInsertToBigQuery",
+                    "artifact": {
+                        "name": "google-cloud",
+                        "version": "0.17.3",
+                        "scope": "SYSTEM"
+                    },
+                    "properties": {
+                        "referenceName": "OrderInsertToBigQuery",
+                        "project": "auto-detect",
+                        "dataset": "${dataSet}",
+                        "table": "${destinationTable}",
+                        "serviceAccountType": "filePath",
+                        "serviceFilePath": "auto-detect",
+                        "operation": "insert",
+                        "allowSchemaRelaxation": "true",
+                        "location": "${dataLocation}",
+                        "createPartitionedTable": "false",
+                        "partitioningType": "TIME",
+                        "partitionFilterRequired": "false",
+                        "schema": "{\"name\":\"etlSchemaBody\",\"type\":\"record\",\"fields\":[{\"name\":\"ORG_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_TYPE_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_LINE_ID\",\"type\":[\"int\",\"null\"]},{\"name\":\"ITEM_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_LINE_QUANTITY\",\"type\":[\"float\",\"null\"]},{\"name\":\"IS_GIFT\",\"type\":[\"int\",\"null\"]},{\"name\":\"REQUESTED_DELIVERY_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"PROMISED_DELIVERY_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"DELIVERY_METHOD_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_CITY\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_STATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_POSTALCODE\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_COUNTRY\",\"type\":[\"string\",\"null\"]},{\"name\":\"ALLOCATION_TIMESTAMP\",\"type\":[\"string\",\"null\"]},{\"name\":\"REQUESTED_SERVICE_LEVEL\",\"type\":[\"string\",\"null\"]},{\"name\":\"REQUESTED_CARRIER\",\"type\":[\"string\",\"null\"]},{\"name\":\"REQUESTED_SHIP_VIA\",\"type\":[\"string\",\"null\"]},{\"name\":\"LOCATION\",\"type\":[\"string\",\"null\"]},{\"name\":\"LOCATION_TYPE_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_CITY\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_STATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_POSTALCODE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_COUNTRY\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_LATITUDE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_LONGITUDE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_PREFERRED_CARRIER\",\"type\":[\"string\",\"null\"]},{\"name\":\"EARLIEST_DELIVERY_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"EARLIEST_SHIP_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"LATEST_SHIP_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"LATEST_RELEASE_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"RELEASE_TIMESTAMP\",\"type\":[\"string\",\"null\"]},{\"name\":\"FULFILLMENT_EVENT_TIMESTAMP\",\"type\":[\"string\",\"null\"]},{\"name\":\"SHIPPED_SERVICE_LEVEL\",\"type\":[\"string\",\"null\"]},{\"name\":\"SHIPPED_CARRIER\",\"type\":[\"string\",\"null\"]},{\"name\":\"SHIPPED_SHIP_VIA\",\"type\":[\"string\",\"null\"]},{\"name\":\"FULFILLED_QUANTITY\",\"type\":[\"float\",\"null\"]},{\"name\":\"FULFILLMENT_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_LINE_CREATED_TIMESTAMP\",\"type\":[{\"type\":\"long\",\"logicalType\":\"timestamp-micros\"},\"null\"]},{\"name\":\"TIMEZONE\",\"type\":[\"string\",\"null\"]}]}",
+                        "truncateTable": "false",
+                        "datasetProject": "${currentProject}"
+                    }
+                },
+                "outputSchema": "{\"name\":\"etlSchemaBody\",\"type\":\"record\",\"fields\":[{\"name\":\"ORG_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_TYPE_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_LINE_ID\",\"type\":[\"int\",\"null\"]},{\"name\":\"ITEM_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_LINE_QUANTITY\",\"type\":[\"float\",\"null\"]},{\"name\":\"IS_GIFT\",\"type\":[\"int\",\"null\"]},{\"name\":\"REQUESTED_DELIVERY_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"PROMISED_DELIVERY_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"DELIVERY_METHOD_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_CITY\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_STATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_POSTALCODE\",\"type\":[\"string\",\"null\"]},{\"name\":\"DESTINATION_COUNTRY\",\"type\":[\"string\",\"null\"]},{\"name\":\"ALLOCATION_TIMESTAMP\",\"type\":[\"string\",\"null\"]},{\"name\":\"REQUESTED_SERVICE_LEVEL\",\"type\":[\"string\",\"null\"]},{\"name\":\"REQUESTED_CARRIER\",\"type\":[\"string\",\"null\"]},{\"name\":\"REQUESTED_SHIP_VIA\",\"type\":[\"string\",\"null\"]},{\"name\":\"LOCATION\",\"type\":[\"string\",\"null\"]},{\"name\":\"LOCATION_TYPE_ID\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_CITY\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_STATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_POSTALCODE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_COUNTRY\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_LATITUDE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_LONGITUDE\",\"type\":[\"string\",\"null\"]},{\"name\":\"SOURCE_PREFERRED_CARRIER\",\"type\":[\"string\",\"null\"]},{\"name\":\"EARLIEST_DELIVERY_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"EARLIEST_SHIP_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"LATEST_SHIP_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"LATEST_RELEASE_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"RELEASE_TIMESTAMP\",\"type\":[\"string\",\"null\"]},{\"name\":\"FULFILLMENT_EVENT_TIMESTAMP\",\"type\":[\"string\",\"null\"]},{\"name\":\"SHIPPED_SERVICE_LEVEL\",\"type\":[\"string\",\"null\"]},{\"name\":\"SHIPPED_CARRIER\",\"type\":[\"string\",\"null\"]},{\"name\":\"SHIPPED_SHIP_VIA\",\"type\":[\"string\",\"null\"]},{\"name\":\"FULFILLED_QUANTITY\",\"type\":[\"float\",\"null\"]},{\"name\":\"FULFILLMENT_DATE\",\"type\":[\"string\",\"null\"]},{\"name\":\"ORDER_LINE_CREATED_TIMESTAMP\",\"type\":[{\"type\":\"long\",\"logicalType\":\"timestamp-micros\"},\"null\"]},{\"name\":\"TIMEZONE\",\"type\":[\"string\",\"null\"]}]}",
+                "inputSchema": [],
+                "id": "OrderInsertToBigQuery"
+            },
+            {
+                "name": "ErrorCollector",
+                "plugin": {
+                    "name": "ErrorCollector",
+                    "type": "errortransform",
+                    "label": "ErrorCollector",
+                    "artifact": {
+                        "name": "core-plugins",
+                        "version": "2.6.1",
+                        "scope": "SYSTEM"
+                    },
+                    "properties": {
+                        "messageField": "msg",
+                        "codeField": "code",
+                        "stageField": "node"
+                    }
+                },
+                "outputSchema": [
+                    {
+                        "name": "etlSchemaBody",
+                        "schema": "{\"type\":\"record\",\"name\":\"errortext\",\"fields\":[{\"name\":\"body\",\"type\":\"string\"},{\"name\":\"msg\",\"type\":\"string\"},{\"name\":\"code\",\"type\":\"int\"},{\"name\":\"node\",\"type\":\"string\"}]}"
+                    }
+                ],
+                "inputSchema": [
+                    {
+                        "name": "TransformData",
+                        "schema": "{\"type\":\"record\",\"name\":\"text\",\"fields\":[{\"name\":\"body\",\"type\":\"string\"}]}"
+                    }
+                ],
+                "id": "ErrorCollector"
+            },
+            {
+                "name": "BigQueryValidateTimeZone",
+                "plugin": {
+                    "name": "BigQueryExecute",
+                    "type": "action",
+                    "label": "BigQueryValidateTimeZone",
+                    "artifact": {
+                        "name": "google-cloud",
+                        "version": "0.17.3",
+                        "scope": "SYSTEM"
+                    },
+                    "properties": {
+                        "project": "auto-detect",
+                        "sql": "${bqUpdateScript}",
+                        "dialect": "standard",
+                        "mode": "batch",
+                        "useCache": "false",
+                        "location": "${dataLocation}",
+                        "rowAsArguments": "false",
+                        "serviceAccountType": "filePath",
+                        "serviceFilePath": "auto-detect"
+                    }
+                },
+                "outputSchema": [
+                    {
+                        "name": "etlSchemaBody",
+                        "schema": ""
+                    }
+                ],
+                "id": "BigQueryValidateTimeZone"
+            },
+            {
+                "name": "ObtainTimeZoneFromLatLong",
+                "plugin": {
+                    "name": "SSH",
+                    "type": "action",
+                    "label": "ObtainTimeZoneFromLatLong",
+                    "artifact": {
+                        "name": "core-plugins",
+                        "version": "2.6.1",
+                        "scope": "SYSTEM"
+                    },
+                    "properties": {
+                        "host": "${host}",
+                        "user": "${userName}",
+                        "privateKey": "${privateKey}",
+                        "command": "${command}",
+                        "outputKey": "sshOutput",
+                        "port": "22"
+                    }
+                },
+                "outputSchema": [
+                    {
+                        "name": "etlSchemaBody",
+                        "schema": ""
+                    }
+                ],
+                "id": "ObtainTimeZoneFromLatLong"
+            },
+            {
+                "name": "BigQueryTransformations",
+                "plugin": {
+                    "name": "BigQueryExecute",
+                    "type": "action",
+                    "label": "BigQueryTransformations",
+                    "artifact": {
+                        "name": "google-cloud",
+                        "version": "0.17.3",
+                        "scope": "SYSTEM"
+                    },
+                    "properties": {
+                        "project": "auto-detect",
+                        "sql": "${bqTransformScript}",
+                        "dialect": "standard",
+                        "mode": "batch",
+                        "useCache": "false",
+                        "location": "${dataLocation}",
+                        "rowAsArguments": "false",
+                        "serviceAccountType": "filePath",
+                        "serviceFilePath": "auto-detect"
+                    }
+                },
+                "outputSchema": [
+                    {
+                        "name": "etlSchemaBody",
+                        "schema": ""
+                    }
+                ],
+                "id": "BigQueryTransformations"
+            },
+            {
+                "name": "ModelEvaluate",
+                "plugin": {
+                    "name": "BigQueryExecute",
+                    "type": "action",
+                    "label": "ModelEvaluate",
+                    "artifact": {
+                        "name": "google-cloud",
+                        "version": "0.17.3",
+                        "scope": "SYSTEM"
+                    },
+                    "properties": {
+                        "project": "auto-detect",
+                        "sql": "${modelEvaluate}",
+                        "dialect": "standard",
+                        "mode": "batch",
+                        "useCache": "false",
+                        "location": "${dataLocation}",
+                        "rowAsArguments": "true",
+                        "serviceAccountType": "filePath",
+                        "serviceFilePath": "auto-detect"
+                    }
+                },
+                "outputSchema": [
+                    {
+                        "name": "etlSchemaBody",
+                        "schema": ""
+                    }
+                ],
+                "id": "ModelEvaluate"
+            },
+            {
+                "name": "Conditional",
+                "plugin": {
+                    "name": "Conditional",
+                    "type": "condition",
+                    "label": "Conditional",
+                    "artifact": {
+                        "name": "condition-plugins",
+                        "version": "1.7.1",
+                        "scope": "SYSTEM"
+                    },
+                    "properties": {
+                        "expression": "${match_percent} > 90"
+                    }
+                },
+                "outputSchema": [
+                    {
+                        "name": "etlSchemaBody",
+                        "schema": ""
+                    }
+                ],
+                "inputSchema": [
+                    {
+                        "name": "ModelEvaluate",
+                        "schema": ""
+                    }
+                ],
+                "id": "Conditional"
+            },
+            {
+                "name": "PostiveResultCleanup",
+                "plugin": {
+                    "name": "BigQueryExecute",
+                    "type": "action",
+                    "label": "PostiveResultCleanup",
+                    "artifact": {
+                        "name": "google-cloud",
+                        "version": "0.17.3",
+                        "scope": "SYSTEM"
+                    },
+                    "properties": {
+                        "project": "auto-detect",
+                        "sql": "INSERT INTO `OrderData.TempResponse`\nSELECT 'ConditionPass' AS CONDITION_RESULT;",
+                        "dialect": "standard",
+                        "mode": "batch",
+                        "useCache": "false",
+                        "location": "US",
+                        "rowAsArguments": "false",
+                        "serviceAccountType": "filePath",
+                        "serviceFilePath": "auto-detect"
+                    }
+                },
+                "outputSchema": [
+                    {
+                        "name": "etlSchemaBody",
+                        "schema": ""
+                    }
+                ],
+                "id": "PostiveResultCleanup"
+            },
+            {
+                "name": "ReTrainModelandExport",
+                "plugin": {
+                    "name": "BigQueryExecute",
+                    "type": "action",
+                    "label": "ReTrainModelandExport",
+                    "artifact": {
+                        "name": "google-cloud",
+                        "version": "0.17.3",
+                        "scope": "SYSTEM"
+                    },
+                    "properties": {
+                        "project": "auto-detect",
+                        "sql": "INSERT INTO `OrderData.TempResponse`\nSELECT 'ConditionFail' AS CONDITION_RESULT;",
+                        "dialect": "standard",
+                        "mode": "batch",
+                        "useCache": "false",
+                        "location": "US",
+                        "rowAsArguments": "false",
+                        "serviceAccountType": "filePath",
+                        "serviceFilePath": "auto-detect"
+                    }
+                },
+                "outputSchema": [
+                    {
+                        "name": "etlSchemaBody",
+                        "schema": ""
+                    }
+                ],
+                "id": "ReTrainModelandExport"
+            },
+            {
+                "name": "errorstore",
+                "plugin": {
+                    "name": "GCS",
+                    "type": "batchsink",
+                    "label": "errorstore",
+                    "artifact": {
+                        "name": "google-cloud",
+                        "version": "0.17.3",
+                        "scope": "SYSTEM"
+                    },
+                    "properties": {
+                        "referenceName": "errorstore",
+                        "project": "auto-detect",
+                        "path": "${transformErrorPath}",
+                        "format": "csv",
+                        "serviceAccountType": "filePath",
+                        "serviceFilePath": "auto-detect",
+                        "location": "${errorLocation}",
+                        "contentType": "application/octet-stream",
+                        "schema": "{\"type\":\"record\",\"name\":\"errortext\",\"fields\":[{\"name\":\"body\",\"type\":\"string\"},{\"name\":\"msg\",\"type\":\"string\"},{\"name\":\"code\",\"type\":\"int\"},{\"name\":\"node\",\"type\":\"string\"}]}",
+                        "writeHeader": "true",
+                        "suffix": "yyyy-MM-dd-HH-mm"
+                    }
+                },
+                "outputSchema": "{\"type\":\"record\",\"name\":\"errortext\",\"fields\":[{\"name\":\"body\",\"type\":\"string\"},{\"name\":\"msg\",\"type\":\"string\"},{\"name\":\"code\",\"type\":\"int\"},{\"name\":\"node\",\"type\":\"string\"}]}",
+                "inputSchema": [
+                    {
+                        "name": "ErrorCollector",
+                        "schema": "{\"type\":\"record\",\"name\":\"errortext\",\"fields\":[{\"name\":\"body\",\"type\":\"string\"},{\"name\":\"msg\",\"type\":\"string\"},{\"name\":\"code\",\"type\":\"int\"},{\"name\":\"node\",\"type\":\"string\"}]}"
+                    }
+                ],
+                "id": "errorstore"
+            },
+            {
+                "name": "GCS Argument Setter",
+                "plugin": {
+                    "name": "GCSArgumentSetter",
+                    "type": "action",
+                    "label": "GCS Argument Setter",
+                    "artifact": {
+                        "name": "google-cloud",
+                        "version": "0.17.3",
+                        "scope": "SYSTEM"
+                    },
+                    "properties": {
+                        "project": "auto-detect",
+                        "path": "${parameterPath}",
+                        "serviceAccountType": "filePath",
+                        "serviceFilePath": "auto-detect"
+                    }
+                },
+                "outputSchema": [
+                    {
+                        "name": "etlSchemaBody",
+                        "schema": ""
+                    }
+                ],
+                "id": "GCS-Argument-Setter"
+            }
+        ],
+        "schedule": "0 * * * *",
+        "engine": "spark",
+        "numOfRecordsPreview": 100,
+        "description": "Data Pipeline Application",
+        "maxConcurrentRuns": 1
+    }
+}
